@@ -30,6 +30,8 @@ protocol SizesProvider: AnyObject {
     var sizes: [String] { get }
 }
 
+// Field view models observe changes on builder instead of Listing object so that model can remain struct and
+// definition does not become "muddy" with propety wrapper, etc.
 final class ListingBuilder: SizesProvider {
     var title: String
     @CurrentValue var multiItem: Bool
@@ -44,7 +46,10 @@ final class ListingBuilder: SizesProvider {
     }
     
     func build() -> Listing {
-        return Listing(title: self.title, price: self.price, inventory: Inventory(isMultiItem: self.multiItem, sizes: self.sizes))
+        Listing(
+            title: self.title,
+            price: self.price,
+            inventory: Inventory(isMultiItem: self.multiItem, sizes: self.sizes))
     }
 }
 
