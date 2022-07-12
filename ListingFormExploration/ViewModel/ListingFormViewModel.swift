@@ -26,6 +26,28 @@ struct CollectionItem {
     let rows: [FormFieldViewModel]
 }
 
+protocol SizesProvider: AnyObject {
+    var sizes: [String] { get }
+}
+
+final class ListingBuilder: SizesProvider {
+    var title: String
+    @CurrentValue var multiItem: Bool
+    var sizes: [String]
+    var price: Decimal?
+    
+    init(_ listing: Listing) {
+        self.title = listing.title
+        self.multiItem = listing.inventory.isMultiItem
+        self.sizes = listing.inventory.sizes
+        self.price = listing.price
+    }
+    
+    func build() -> Listing {
+        return Listing(title: self.title, price: self.price, inventory: Inventory(isMultiItem: self.multiItem, sizes: self.sizes))
+    }
+}
+
 final class ListingFormViewModel {
     
     let titleFieldViewModel: TitleFieldViewModel
@@ -33,60 +55,79 @@ final class ListingFormViewModel {
     let sizesFieldViewModel: SizesFieldViewModel
     let priceFieldViewModel: PriceFieldViewModel
     
+    let listingBuilder: ListingBuilder
+    
     let items: [CollectionItem]
     
     init(listing: Listing, mode: ListingMode) {
         
-        // Listing -> VMs
-        self.titleFieldViewModel = TitleFieldViewModel(listing.title)
-        self.multiItemFieldViewModel = MultiItemFieldViewModel(listing.inventory.isMultiItem, mode: mode)
-        self.sizesFieldViewModel = SizesFieldViewModel(listing.inventory.sizes, isMultiItemSubject: self.multiItemFieldViewModel.$value)
-        self.priceFieldViewModel = PriceFieldViewModel(listing.price)
+        let builder = ListingBuilder(listing)
+        self.titleFieldViewModel = TitleFieldViewModel(listing.title) { newValue in
+            builder.title = newValue
+        }
+        self.multiItemFieldViewModel = MultiItemFieldViewModel(listing.inventory.isMultiItem, mode: mode) { newValue in
+            builder.multiItem = newValue
+        }
+        self.multiItemFieldViewModel.sizesProvider = builder
+        self.sizesFieldViewModel = SizesFieldViewModel(listing.inventory.sizes, isMultiItemSubject: builder.$multiItem) { newValue in
+            builder.sizes = newValue
+        }
+        self.priceFieldViewModel = PriceFieldViewModel(listing.price) { newValue in
+            builder.price = newValue
+        }
+        self.listingBuilder = builder
         
         self.items = [
             CollectionItem(section: "Title", rows: [self.titleFieldViewModel]),
             CollectionItem(section: "Details", rows: [self.multiItemFieldViewModel, self.sizesFieldViewModel]),
             CollectionItem(section: "Prices", rows: [self.priceFieldViewModel]),
         ]
-        
-        // ! Circular dependency between multi-item field VM and sizes field VM
-        self.multiItemFieldViewModel.sizesProvider = self.sizesFieldViewModel
     }
     
     func didTapDone() {
-        
-        // VMs -> Listing
-        let title = self.titleFieldViewModel.value
-        let price = self.priceFieldViewModel.value
-        let inventory = Inventory(isMultiItem: self.multiItemFieldViewModel.value, sizes: self.sizesFieldViewModel.value)
-        let listing = Listing(title: title, price: price, inventory: inventory)
-        
+        let listing = self.listingBuilder.build()
         print(listing)
     }
 }
 
 final class TitleFieldViewModel: FormFieldViewModel, ObservableObject {
+    typealias Value = String
     
-    @Published var value: String
+    @Published var value: String {
+        didSet {
+            self.onValueUpdate(self.value)
+        }
+    }
     let label: String
     
-    init(_ initialValue: String) {
+    private let onValueUpdate: (Value) -> Void
+    
+    init(_ initialValue: Value, onValueUpdate: @escaping (Value) -> Void) {
         self.value = initialValue
         self.label = "Title"
+        self.onValueUpdate = onValueUpdate
         super.init(id: UUID().uuidString)
     }
 }
 
 final class PriceFieldViewModel: FormFieldViewModel, ObservableObject {
+    typealias Value = Decimal?
     
-    private(set) var value: Decimal?
+    private(set) var value: Value {
+        didSet {
+            self.onValueUpdate(self.value)
+        }
+    }
     let label: String
     @Published private(set) var display: String
     
-    init(_ initialValue: Decimal?) {
+    private let onValueUpdate: (Value) -> Void
+    
+    init(_ initialValue: Value, onValueUpdate: @escaping (Value) -> Void) {
         self.value = initialValue
         self.label = "Price"
         self.display = Self.getDisplay(from: self.value)
+        self.onValueUpdate = onValueUpdate
         super.init(id: UUID().uuidString)
     }
     
@@ -103,25 +144,28 @@ final class PriceFieldViewModel: FormFieldViewModel, ObservableObject {
     }
 }
 
-protocol SizesProvider: AnyObject {
-    var sizes: [String] { get }
-}
-
 final class MultiItemFieldViewModel: FormFieldViewModel, ObservableObject {
+    typealias Value = Bool
     
-    @CurrentValue private(set) var value: Bool
+    @CurrentValue private(set) var value: Value {
+        didSet {
+            self.onValueUpdate(self.value)
+        }
+    }
     let label: String
     private var isExplicitlySelected: Bool
     @Published private(set) var display: String
     
     weak var sizesProvider: SizesProvider?
+    private let onValueUpdate: (Value) -> Void
     
-    init(_ initialValue: Bool, mode: ListingMode) {
+    init(_ initialValue: Value, mode: ListingMode, onValueUpdate: @escaping (Value) -> Void) {
         self.value = initialValue
         self.label = "Quantity"
         let isExplicitlySelected = mode == .edit
         self.isExplicitlySelected = isExplicitlySelected
         self.display = Self.getDisplay(from: initialValue, isExplicitlySelected: isExplicitlySelected)
+        self.onValueUpdate = onValueUpdate
         super.init(id: UUID().uuidString)
     }
     
@@ -145,21 +189,29 @@ final class MultiItemFieldViewModel: FormFieldViewModel, ObservableObject {
 }
 
 final class SizesFieldViewModel: FormFieldViewModel, ObservableObject, SizesProvider {
+    typealias Value = [String]
     
-    private(set) var value: [String]
+    private(set) var value: Value {
+        didSet {
+            self.onValueUpdate(self.value)
+        }
+    }
     @Published var label: String
     @Published private(set) var display: String
     
     private var cancellables: Set<AnyCancellable> = []
     
+    private let onValueUpdate: (Value) -> Void
+    
     var sizes: [String] {
         return self.value
     }
     
-    init(_ initialValue: [String], isMultiItemSubject: CurrentValueSubject<Bool, Never>) {
+    init(_ initialValue: Value, isMultiItemSubject: CurrentValueSubject<Bool, Never>, onValueUpdate: @escaping (Value) -> Void) {
         self.value = initialValue
         self.label = ""
         self.display = Self.getDisplay(from: self.value)
+        self.onValueUpdate = onValueUpdate
         super.init(id: UUID().uuidString)
         
         isMultiItemSubject
