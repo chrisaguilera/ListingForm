@@ -13,21 +13,43 @@ enum ListingMode {
     case edit
 }
 
+class FormFieldViewModel: Identifiable {
+    let id: String
+    
+    init(id: String) {
+        self.id = id
+    }
+}
+
+struct CollectionItem {
+    let section: String
+    let rows: [FormFieldViewModel]
+}
+
 final class ListingFormViewModel {
     
     let titleFieldViewModel: TitleFieldViewModel
-    let priceFieldViewModel: PriceFieldViewModel
     let multiItemFieldViewModel: MultiItemFieldViewModel
     let sizesFieldViewModel: SizesFieldViewModel
+    let priceFieldViewModel: PriceFieldViewModel
+    
+    let items: [CollectionItem]
     
     init(listing: Listing, mode: ListingMode) {
         
         // Listing -> VMs
         self.titleFieldViewModel = TitleFieldViewModel(listing.title)
-        self.priceFieldViewModel = PriceFieldViewModel(listing.price)
         self.multiItemFieldViewModel = MultiItemFieldViewModel(listing.inventory.isMultiItem, mode: mode)
-        self.sizesFieldViewModel = SizesFieldViewModel(listing.inventory.sizes, isMultiItemPublisher: self.multiItemFieldViewModel.$value)
+        self.sizesFieldViewModel = SizesFieldViewModel(listing.inventory.sizes, isMultiItemSubject: self.multiItemFieldViewModel.$value)
+        self.priceFieldViewModel = PriceFieldViewModel(listing.price)
         
+        self.items = [
+            CollectionItem(section: "Title", rows: [self.titleFieldViewModel]),
+            CollectionItem(section: "Details", rows: [self.multiItemFieldViewModel, self.sizesFieldViewModel]),
+            CollectionItem(section: "Prices", rows: [self.priceFieldViewModel]),
+        ]
+        
+        // ! Circular dependency between multi-item field VM and sizes field VM
         self.multiItemFieldViewModel.sizesProvider = self.sizesFieldViewModel
     }
     
@@ -43,7 +65,7 @@ final class ListingFormViewModel {
     }
 }
 
-final class TitleFieldViewModel: ObservableObject {
+final class TitleFieldViewModel: FormFieldViewModel, ObservableObject {
     
     @Published var value: String
     let label: String
@@ -51,19 +73,21 @@ final class TitleFieldViewModel: ObservableObject {
     init(_ initialValue: String) {
         self.value = initialValue
         self.label = "Title"
+        super.init(id: UUID().uuidString)
     }
 }
 
-final class PriceFieldViewModel: ObservableObject {
+final class PriceFieldViewModel: FormFieldViewModel, ObservableObject {
     
     private(set) var value: Decimal?
     let label: String
-    @Published var display: String
+    @Published private(set) var display: String
     
     init(_ initialValue: Decimal?) {
         self.value = initialValue
         self.label = "Price"
         self.display = Self.getDisplay(from: self.value)
+        super.init(id: UUID().uuidString)
     }
     
     func inputDidChange(_ input: String) {
@@ -83,12 +107,12 @@ protocol SizesProvider: AnyObject {
     var sizes: [String] { get }
 }
 
-final class MultiItemFieldViewModel: ObservableObject {
+final class MultiItemFieldViewModel: FormFieldViewModel, ObservableObject {
     
-    @Published private(set) var value: Bool
+    @CurrentValue private(set) var value: Bool
     let label: String
     private var isExplicitlySelected: Bool
-    @Published var display: String
+    @Published private(set) var display: String
     
     weak var sizesProvider: SizesProvider?
     
@@ -98,6 +122,7 @@ final class MultiItemFieldViewModel: ObservableObject {
         let isExplicitlySelected = mode == .edit
         self.isExplicitlySelected = isExplicitlySelected
         self.display = Self.getDisplay(from: initialValue, isExplicitlySelected: isExplicitlySelected)
+        super.init(id: UUID().uuidString)
     }
     
     func inputDidChange(_ input: Bool) {
@@ -119,11 +144,11 @@ final class MultiItemFieldViewModel: ObservableObject {
     }
 }
 
-final class SizesFieldViewModel: ObservableObject, SizesProvider {
+final class SizesFieldViewModel: FormFieldViewModel, ObservableObject, SizesProvider {
     
     private(set) var value: [String]
     @Published var label: String
-    @Published var display: String
+    @Published private(set) var display: String
     
     private var cancellables: Set<AnyCancellable> = []
     
@@ -131,12 +156,13 @@ final class SizesFieldViewModel: ObservableObject, SizesProvider {
         return self.value
     }
     
-    init(_ initialValue: [String], isMultiItemPublisher: Published<Bool>.Publisher) {
+    init(_ initialValue: [String], isMultiItemSubject: CurrentValueSubject<Bool, Never>) {
         self.value = initialValue
         self.label = ""
         self.display = Self.getDisplay(from: self.value)
+        super.init(id: UUID().uuidString)
         
-        isMultiItemPublisher
+        isMultiItemSubject
             .withPrevious()
             .sink { [weak self] previous, current in
                 guard let self = self else { return }
@@ -170,5 +196,20 @@ extension Publisher {
             return $0
         }
         .eraseToAnyPublisher()
+    }
+}
+
+@propertyWrapper
+public class CurrentValue<Value> {
+    
+    public var wrappedValue: Value {
+        get { self.projectedValue.value }
+        set { self.projectedValue.value = newValue }
+    }
+    
+    public var projectedValue: CurrentValueSubject<Value, Never>
+    
+    public init(wrappedValue: Value) {
+        self.projectedValue = CurrentValueSubject(wrappedValue)
     }
 }

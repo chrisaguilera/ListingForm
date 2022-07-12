@@ -16,10 +16,24 @@ struct ListingFormView: View {
     
     var body: some View {
         Form {
-            TitleFieldView(self.viewModel.titleFieldViewModel)
-            PriceFieldView(self.viewModel.priceFieldViewModel)
-            MultiItemFieldView(self.viewModel.multiItemFieldViewModel)
-            SizesFieldView(self.viewModel.sizesFieldViewModel)
+            ForEach(self.viewModel.items, id: \.section) { item in
+                Section(item.section) {
+                    ForEach(item.rows, id: \.id) { viewModel in
+                        switch viewModel {
+                        case let viewModel as TitleFieldViewModel:
+                            TitleFieldView(viewModel)
+                        case let viewModel as MultiItemFieldViewModel:
+                            MultiItemFieldView(viewModel)
+                        case let viewModel as SizesFieldViewModel:
+                            SizesFieldView(viewModel)
+                        case let viewModel as PriceFieldViewModel:
+                            PriceFieldView(viewModel)
+                        default:
+                            Text("")
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -73,7 +87,7 @@ struct MultiItemFieldView: View {
     var body: some View {
         HStack {
             Text(self.viewModel.label)
-            TextField("Optional", text: self.$viewModel.display)
+            TextField("Optional", text: .constant(self.viewModel.display))
                 .disabled(true)
             Toggle(
                 "Toggle",
@@ -98,7 +112,7 @@ struct SizesFieldView: View {
     var body: some View {
         HStack {
             Text(self.viewModel.label)
-            TextField("Required", text: self.$viewModel.display)
+            TextField("Required", text: .constant(self.viewModel.display))
                 .disabled(true)
         }
     }
