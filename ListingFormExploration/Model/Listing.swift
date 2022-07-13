@@ -7,13 +7,13 @@
 
 import Foundation
 
-struct Inventory {
-    var isMultiItem: Bool
-    var sizes: [String]
+struct ListingInventory {
+    let isMultiItem: Bool
+    let sizes: [String]
 }
 
 struct Listing {
-    var title: String
-    var price: Decimal?
-    var inventory: Inventory
+    let title: String
+    let price: Decimal?
+    let inventory: ListingInventory
 }

@@ -14,6 +14,29 @@ struct UITextFieldConfiguration {
 
 struct TextFieldView: UIViewRepresentable {
     
+    class Coordinator: NSObject, UITextFieldDelegate {
+        var onInputChange: (String) -> Void
+        
+        init(onInputChange: @escaping (String) -> Void) {
+            self.onInputChange = onInputChange
+        }
+        
+        func textField(
+            _ textField: UITextField,
+            shouldChangeCharactersIn range: NSRange,
+            replacementString string: String
+        ) -> Bool {
+            let inputString: String
+            if let text = textField.text, let rangeInText = Range(range, in: text) {
+                inputString = text.replacingCharacters(in: rangeInText, with: string)
+            } else {
+                inputString = ""
+            }
+            self.onInputChange(inputString)
+            return false
+        }
+    }
+    
     private let placeholder: String
     private let configuration: UITextFieldConfiguration
     private let readOnlyText: String
@@ -23,8 +46,8 @@ struct TextFieldView: UIViewRepresentable {
         placeholder: String,
         configuration: UITextFieldConfiguration,
         reads readOnlyText: String,
-        onInputChange: @escaping (String) -> Void) {
-        
+        onInputChange: @escaping (String) -> Void
+    ) {
         self.placeholder = placeholder
         self.configuration = configuration
         self.readOnlyText = readOnlyText
@@ -50,25 +73,6 @@ struct TextFieldView: UIViewRepresentable {
         Coordinator { text in
             self.onInputChange(text)
         }
-    }
-}
-
-class Coordinator: NSObject, UITextFieldDelegate {
-    var onInputChange: (String) -> Void
-    
-    init(onInputChange: @escaping (String) -> Void) {
-        self.onInputChange = onInputChange
-    }
-    
-    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
-        let inputString: String
-        if let text = textField.text, let rangeInText = Range(range, in: text) {
-            inputString = text.replacingCharacters(in: rangeInText, with: string)
-        } else {
-            inputString = ""
-        }
-        self.onInputChange(inputString)
-        return false
     }
 }
 

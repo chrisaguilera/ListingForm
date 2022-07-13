@@ -48,7 +48,12 @@ struct TitleFieldView: View {
     var body: some View {
         HStack {
             Text(self.viewModel.label)
-            TextField("Required", text: self.$viewModel.value)
+            TextField(
+                "Required",
+                text: Binding<String>(
+                    get: { return self.viewModel.display },
+                    set: { self.viewModel.inputDidChange($0) }
+                ))
         }
     }
 }
@@ -70,18 +75,15 @@ struct PriceFieldView: View {
                 onInputChange: { [weak viewModel] input in
                     viewModel?.inputDidChange(input)
                 })
-                .keyboardType(UIKeyboardType.numberPad)
         }
     }
 }
 
 struct MultiItemFieldView: View {
     @ObservedObject private var viewModel: MultiItemFieldViewModel
-    @State var isEnabled: Bool
     
     init(_ viewModel: MultiItemFieldViewModel) {
         self.viewModel = viewModel
-        self.isEnabled =  viewModel.value
     }
     
     var body: some View {
@@ -91,13 +93,11 @@ struct MultiItemFieldView: View {
                 .disabled(true)
             Toggle(
                 "Toggle",
-                isOn: .init(get: {
-                    return self.isEnabled
-                }, set: { [weak viewModel] newValue in
-                    self.isEnabled = newValue
-                    viewModel?.inputDidChange(self.isEnabled)
-                }))
-                .labelsHidden()
+                isOn: Binding<Bool>(
+                    get: { return self.viewModel.valueSubject.value },
+                    set: { self.viewModel.inputDidChange($0) }
+                ))
+            .labelsHidden()
         }
     }
 }

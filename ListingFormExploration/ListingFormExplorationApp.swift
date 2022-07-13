@@ -10,7 +10,7 @@ import SwiftUI
 @main
 struct ListingFormExplorationApp: App {
     
-    private let viewModel = ListingFormViewModel(listing: .mock, mode: .new)
+    let viewModel = ListingFormViewModel(listing: .mock, mode: .edit) { print($0) }
     
     var body: some Scene {
         WindowGroup {
@@ -18,8 +18,15 @@ struct ListingFormExplorationApp: App {
                 ListingFormView(self.viewModel)
                     .navigationTitle("Edit Listing")
                     .toolbar {
-                        Button("Done") { [weak viewModel] in
-                            viewModel?.didTapDone()
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Reset") {
+                                self.viewModel.didTapReset()
+                            }
+                        }
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                self.viewModel.didTapDone()
+                            }
                         }
                     }
             }
@@ -27,20 +34,19 @@ struct ListingFormExplorationApp: App {
     }
 }
 
-extension Inventory {
-    static let empty: Inventory = {
-        Inventory(isMultiItem: false, sizes: [])
+extension ListingInventory {
+    fileprivate static let empty: ListingInventory = {
+        ListingInventory(isMultiItem: false, sizes: [])
     }()
 }
 
 extension Listing {
-    
-    static let empty: Listing = {
+    fileprivate static let empty: Listing = {
         Listing(title: "", price: nil, inventory: .empty)
     }()
     
-    static let mock: Listing = {
-        let inventory = Inventory(isMultiItem: true, sizes: ["S", "M"])
+    fileprivate static let mock: Listing = {
+        let inventory = ListingInventory(isMultiItem: true, sizes: ["S", "M"])
         return Listing(title: "Jeans", price: 20, inventory: inventory)
     }()
 }
